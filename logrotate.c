@@ -1104,7 +1104,7 @@ static int copyTruncate(char *currLog, char *saveLog, struct stat *sb,
 	if (!debug) {
 	    if (fdsave >= 0)
 		fsync(fdsave);
-	    if (ftruncate(fdcurr, 0)) {
+	    if (truncate(fdcurr, sb->st_size)) {
 		message(MESS_ERROR, "error truncating %s: %s\n", currLog,
 			strerror(errno));
 		goto fail;
@@ -1122,6 +1122,16 @@ fail:
 	close(fdsave);
     }
     return rc;
+}
+
+static int truncate(int fd, off_t size) {
+#if defined(__Linux__) && defined(FALLOC_FL_COLLAPSE_RANGE)
+	const off_t align = 4096, zero = size%align, trunc = size-zero;
+	if (fallocate(fd, FALLOC_FL_COLLAPSE_RANGE, 0, trunc) == 0)
+		if (fallocate(fd, FALLOC_FL_PUNCH_HOLE|FALLOC_FL_KEEP_SIZE, 0, zero) == 0) 
+			return 0;
+#endif
+	return ftruncate(fd, 0);
 }
 
 /* return value similar to mktime() but the exact time is ignored */
