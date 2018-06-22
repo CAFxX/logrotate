@@ -1104,7 +1104,7 @@ static int copyTruncate(char *currLog, char *saveLog, struct stat *sb,
 	if (!debug) {
 	    if (fdsave >= 0)
 		fsync(fdsave);
-	    if (truncate(fdcurr, sb->st_size)) {
+	    if (truncate(fdcurr, sb)) {
 		message(MESS_ERROR, "error truncating %s: %s\n", currLog,
 			strerror(errno));
 		goto fail;
@@ -1124,11 +1124,13 @@ fail:
     return rc;
 }
 
-static int truncate(int fd, off_t size) {
-#if defined(__Linux__) && defined(FALLOC_FL_COLLAPSE_RANGE)
-	const off_t align = 4096, zero = size%align, trunc = size-zero;
+/* truncate from the beginning of the file size bytes; if truncating from
+   the beginning is not supported by the os/fs truncate to 0 */
+static int truncate(int fd, struct stat *sb) {
+#if defined(__linux__) && defined(FALLOC_FL_COLLAPSE_RANGE)
+	const off_t align = sb->st_blksize, zero = sb->st_size%align, trunc = sb->st_size-zero;
 	if (fallocate(fd, FALLOC_FL_COLLAPSE_RANGE, 0, trunc) == 0)
-		if (fallocate(fd, FALLOC_FL_PUNCH_HOLE|FALLOC_FL_KEEP_SIZE, 0, zero) == 0) 
+		if (fallocate(fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, 0, zero) == 0) 
 			return 0;
 #endif
 	return ftruncate(fd, 0);
